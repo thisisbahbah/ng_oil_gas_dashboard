@@ -113,6 +113,13 @@ def load_field_production(engine, df: pd.DataFrame) -> int:
     df["source"] = "NUPRC"
     df["shut_in_reason"] = df["shut_in_reason"].where(df["shut_in_reason"] != "", None)
 
+    # Replace float NaN with None so PostgreSQL stores proper NULL.
+    # pandas NaN becomes PostgreSQL 'NaN'::numeric which is NOT the same
+    # as NULL — this breaks all IS NOT NULL checks in the views.
+    for col in ["nameplate_kbd", "production_kbd"]:
+        if col in df.columns:
+            df[col] = df[col].where(df[col].notna(), other=None)
+
     upsert_sql = text("""
         INSERT INTO production_by_field
             (production_month, field_name, operator, crude_grade,

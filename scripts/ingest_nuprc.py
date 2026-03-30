@@ -130,9 +130,16 @@ def process_field_data(df: pd.DataFrame) -> pd.DataFrame:
     df["production_month"] = normalise_month_column(df["production_month"])
     df = df.dropna(subset=["production_month"])
 
-    # Numeric columns
+    # Numeric columns — coerce then replace NaN with None so PostgreSQL
+    # stores proper NULL instead of the float NaN value
     for col in ["production_kbd", "nameplate_kbd"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # CRITICAL: replace float NaN with Python None before DB insert.
+    # pandas NaN written via psycopg2 becomes PostgreSQL 'NaN'::numeric,
+    # which is NOT the same as NULL — IS NOT NULL returns true for NaN,
+    # breaking all views that filter on nameplate_kbd IS NOT NULL.
+    df["nameplate_kbd"] = df["nameplate_kbd"].where(df["nameplate_kbd"].notna(), other=None)
 
     # String columns
     for col in ["field_name", "operator", "crude_grade"]:
