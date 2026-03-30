@@ -102,8 +102,8 @@ with st.sidebar:
     st.divider()
     st.caption("Data sources: EIA · OPEC · NUPRC")
     st.caption("Built by Oluwafemi")
-    st.caption("[GitHub](https://github.com/yourusername/ng_oil_gas_dashboard) · "
-               "[Medium](https://medium.com/@yourusername)")
+    st.caption("[GitHub](https://github.com/thisisbahbah/ng_oil_gas_dashboard) · "
+               )
 
 
 # ── Main page ─────────────────────────────────────────────
@@ -171,31 +171,51 @@ price_corr     = filter_years(price_corr, "production_month")
 
 
 # ── KPI cards ─────────────────────────────────────────────
-latest = prod_price.dropna(subset=["production_kbd"]).iloc[-1]
-latest_opec = opec_data.dropna(subset=["actual_kbd"]).iloc[-1] if len(opec_data) else None
-latest_shutin = shutin_monthly.dropna(subset=["national_shutin_pct"]).iloc[-1]
+def safe_last(df, subset_col):
+    """Return last non-null row, or None if dataframe is empty after dropna."""
+    filtered = df.dropna(subset=[subset_col])
+    return filtered.iloc[-1] if len(filtered) > 0 else None
+
+latest       = safe_last(prod_price, "production_kbd")
+latest_opec  = safe_last(opec_data, "actual_kbd")
+latest_shutin= safe_last(shutin_monthly, "national_shutin_pct")
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric(
-        "Current Production",
-        f"{latest['production_kbd']:,.0f} kbd",
-        delta=f"{latest.get('yoy_change_pct', 0):+.1f}% YoY",
-    )
+    if latest is not None:
+        yoy = latest.get("yoy_change_pct", 0) or 0
+        st.metric(
+            "Current Production",
+            f"{latest['production_kbd']:,.0f} kbd",
+            delta=f"{yoy:+.1f}% YoY",
+        )
+    else:
+        st.metric("Current Production", "N/A")
 with col2:
-    opec_delta = f"{latest_opec['compliance_pct']:+.1f}% vs quota" if latest_opec is not None else "N/A"
-    opec_actual = f"{latest_opec['actual_kbd']:,.0f} kbd" if latest_opec is not None else "N/A"
-    st.metric("OPEC Actual (latest)", opec_actual, delta=opec_delta)
+    if latest_opec is not None:
+        st.metric(
+            "OPEC Actual (latest)",
+            f"{latest_opec['actual_kbd']:,.0f} kbd",
+            delta=f"{latest_opec['compliance_pct']:+.1f}% vs quota",
+        )
+    else:
+        st.metric("OPEC Actual (latest)", "N/A")
 with col3:
-    brent = latest.get("brent_price_usd")
-    st.metric("Brent Price", f"${brent:.2f}/bbl" if brent else "N/A")
+    if latest is not None:
+        brent = latest.get("brent_price_usd")
+        st.metric("Brent Price", f"${brent:.2f}/bbl" if brent else "N/A")
+    else:
+        st.metric("Brent Price", "N/A")
 with col4:
-    st.metric(
-        "National Shut-in",
-        f"{latest_shutin['total_shutin_kbd']:,.0f} kbd",
-        delta=f"{latest_shutin['national_shutin_pct']:.1f}% of capacity offline",
-        delta_color="inverse",
-    )
+    if latest_shutin is not None:
+        st.metric(
+            "National Shut-in",
+            f"{latest_shutin['total_shutin_kbd']:,.0f} kbd",
+            delta=f"{latest_shutin['national_shutin_pct']:.1f}% of capacity offline",
+            delta_color="inverse",
+        )
+    else:
+        st.metric("National Shut-in", "N/A — no nameplate data yet")
 
 st.divider()
 
@@ -304,12 +324,14 @@ with col3a:
 with col3b:
     st.caption("**Shut-in % by field**")
     for _, row in top_fields.head(7).iterrows():
-        pct = row.get("avg_shut_in_pct", 0) or 0
+        raw_pct = row.get("avg_shut_in_pct", None)
+        pct = 0.0 if (raw_pct is None or pd.isna(raw_pct)) else float(raw_pct)
         color = "#E24B4A" if pct > 25 else "#BA7517" if pct > 10 else "#1D9E75"
+        label = f"{pct:.1f}%" if pct > 0 else "—"
         st.markdown(
             f"<div style='display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px'>"
             f"<span>{row['field_name']}</span>"
-            f"<span style='color:{color};font-weight:500'>{pct:.1f}%</span></div>",
+            f"<span style='color:{color};font-weight:500'>{label}</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -361,11 +383,12 @@ fig5.add_trace(go.Scatter(
     fillcolor="rgba(24,95,165,0.08)",
     name="12-month rolling r",
 ))
+cfg = plot_config()
+cfg.pop("yaxis", None)
 fig5.update_layout(
-    **plot_config(),
+    **cfg,
     height=240,
-    yaxis=dict(range=[-1, 1], gridcolor=COLORS["grid"]),
-    yaxis_title="Pearson r",
+    yaxis=dict(range=[-1, 1], gridcolor=COLORS["grid"], title="Pearson r"),
 )
 st.plotly_chart(fig5, use_container_width=True)
 st.caption(
@@ -392,5 +415,5 @@ if show_raw:
 st.divider()
 st.caption(
     "Data: EIA Open Data API · OPEC Monthly Oil Market Report · NUPRC Production Reports  |  "
-    "Built by Oluwafemi · [GitHub](https://github.com/yourusername/ng_oil_gas_dashboard)"
+    "Built by Oluwafemi · [GitHub](https://github.com/thisisbahbah/ng_oil_gas_dashboard)"
 )
