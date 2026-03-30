@@ -1,0 +1,10 @@
+.env
+venv/
+pycache/
+*.pyc
+.DS_Store
+data/raw/
+data/processed/
+.vscode/
+.streamlit/secrets.toml
+.venv/
